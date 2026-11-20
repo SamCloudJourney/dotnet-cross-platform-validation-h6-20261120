@@ -1,0 +1,33 @@
+name: .NET 11 cross-platform baseline
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: '11.0.100'
+      - name: Verify released SDK and managed execution
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sdk = (dotnet --version).Trim()
+          if ($sdk -ne '11.0.100') { throw "Unexpected SDK: $sdk" }
+          $probe = Join-Path $env:RUNNER_TEMP 'dotnet-11-baseline'
+          dotnet new console --framework net11.0 --output $probe
+          if ($LASTEXITCODE -ne 0) { throw 'Project creation failed' }
+          $output = (dotnet run --project $probe --no-restore).Trim()
+          if ($LASTEXITCODE -ne 0 -or $output -ne 'Hello, World!') { throw 'Managed execution failed' }
+          Write-Output "OS=$env:RUNNER_OS IMAGE=$env:ImageOS VERSION=$env:ImageVersion SDK=$sdk OUTPUT_OK=true"
