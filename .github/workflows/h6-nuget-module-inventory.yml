@@ -1,0 +1,43 @@
+name: H6 Windows NuGet assembly inventory
+on:
+  push:
+    branches:
+      - h6-nuget-module-inventory-20261120-871f23c5
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: 11.0.100
+      - name: Inventory installed Microsoft NuGet assemblies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Output "IMAGE_OS=$env:ImageOS IMAGE_VERSION=$env:ImageVersion"
+          dotnet --version
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $vs = (& $vswhere -latest -products '*' -property installationPath).Trim()
+          if (-not $vs) { throw 'Visual Studio installation not found' }
+          Write-Output "VS_INSTALL=$vs"
+          $ide = Join-Path $vs 'Common7\IDE'
+          foreach ($name in @('NuGet.Commands.dll','NuGet.ProjectModel.dll','NuGet.Build.Tasks.dll')) {
+            $matches = @(Get-ChildItem -LiteralPath $ide -Recurse -File -Filter $name -ErrorAction SilentlyContinue)
+            Write-Output "ASSEMBLY_NAME=$name COUNT=$($matches.Count)"
+            foreach ($file in ($matches | Select-Object -First 8)) {
+              $assembly = [Reflection.AssemblyName]::GetAssemblyName($file.FullName)
+              $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              Write-Output "VS_ASSEMBLY=$($file.FullName) FILE_VERSION=$($file.VersionInfo.FileVersion) ASSEMBLY_ID=$($assembly.FullName) SHA256=$hash"
+            }
+          }
+          $sdk = Join-Path $env:ProgramFiles 'dotnet\sdk\11.0.100\NuGet.Commands.dll'
+          if (Test-Path -LiteralPath $sdk) {
+            $file = Get-Item -LiteralPath $sdk
+            $assembly = [Reflection.AssemblyName]::GetAssemblyName($sdk)
+            $hash = (Get-FileHash -LiteralPath $sdk -Algorithm SHA256).Hash.ToLowerInvariant()
+            Write-Output "SDK_ASSEMBLY=$sdk FILE_VERSION=$($file.VersionInfo.FileVersion) ASSEMBLY_ID=$($assembly.FullName) SHA256=$hash"
+          }
